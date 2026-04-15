@@ -8,7 +8,7 @@ Tokenizer standar (GPT-4, LLaMA) tidak dioptimalkan untuk bahasa Indonesia. Aura
 
 | Aspek | GPT-4 | LLaMA-2 | **AuraLLM** |
 |-------|-------|---------|-----------|
-| "Selamat pagi" | Sel amat pagi (3 tokens) | Se lam at p agi (5 tokens) | **Selamat pagi (2 tokens)** ✅ |
+| "Selamat pagi" | ```Sel``` ```amat``` ```pagi``` (3 tokens) | ```Se``` ```lam``` ```at``` ```p``` ```agi``` (5 tokens) | ```Selamat``` ```pagi``` (2 tokens) ✅ |
 | **Hasil** | Inference Lambat | Training Mahal | **Lebih Cepat & Murah** |
 
 ### Manfaat:
