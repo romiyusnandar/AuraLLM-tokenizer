@@ -21,16 +21,27 @@ Tokenizer standar (GPT-4, LLaMA) tidak dioptimalkan untuk bahasa Indonesia. Aura
 
 ## 🧪 Testing
 
-Script sudah include automatic testing:
 
 ```
---- TEST HASIL ---
-Teks Asli : Selamat pagi Nusantara! 123 + 456 = 579. [INST] Apa kabar? [/INST]
-Tokens    : ['Selamat', 'Ġpagi', 'Ġ', 'Nusantara', '!', 'Ġ', '1', '2', '3', 'Ġ+', 'Ġ', '4', '5', '6', 'Ġ=', 'Ġ', '5', '7', '9', '.', 'Ġ', '[INST]', 'ĠApa', 'Ġkabar', '?', 'Ġ', '[/INST]']
-Total IDs : 27 tokens
+tok = PreTrainedTokenizerFast.from_pretrained("./aura_tokenizer_v2")
+
+sample = "AuraLLM adalah model bahasa untuk Indonesia dan Nusantara."
+enc = tok(sample)
+
+print(tok.tokenize(sample))
+print(enc["input_ids"])
+print(tok.convert_ids_to_tokens(enc["input_ids"]))
+print(tok.decode(enc["input_ids"]))
+
+# Output
+['AuraLLM', 'adalah', 'model', 'bahasa', 'untuk', 'Indonesia', 'dan', 'Nusantara', '.']
+[2, 16, 12979, 15111, 13382, 12960, 19, 12913, 24, 45, 1]
+['[BOS]', 'AuraLLM', 'adalah', 'model', 'bahasa', 'untuk', 'Indonesia', 'dan', 'Nusantara', '.', '[EOS]']
+[BOS]AuraLLMadalahmodelbahasauntukIndonesiadanNusantara.[EOS]
+
 ```
 
 ---
 
 **Last Updated:** April 2026  
-**Version:** 1.0
+**Version:** 2.0
