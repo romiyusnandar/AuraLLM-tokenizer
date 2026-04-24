@@ -6,16 +6,15 @@ from tokenizers import Tokenizer, models, normalizers, pre_tokenizers, decoders,
 from tokenizers.trainers import BpeTrainer
 from transformers import PreTrainedTokenizerFast
 
-# =========================================================
-# CONFIG
-# =========================================================
-DATASET_NAME = "AksaraLLM/aksara-pretrain-id"
-OUTPUT_DIR = Path("./aura_tokenizer_v2")
+# Konfigurasi
+DATASET_NAME = "AksaraLLM/aksara-pretrain-clean-v1.1"
+OUTPUT_DIR = Path("./aurallm/aura_tokenizer_v3")
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-VERSION = "2.0.0"
+VERSION = "3.0.0"
 VOCAB_SIZE = 32773
 MIN_FREQUENCY = 2
+END_OF_WORD_SUFFIX = "</w>"
 
 SPECIAL_TOKENS = [
     "[PAD]",
@@ -49,62 +48,58 @@ BRAND_TOKENS = [
     "nusantara",
 ]
 
-ALL_ADDED_TOKENS = SPECIAL_TOKENS + BRAND_TOKENS
-
-# =========================================================
-# LOAD DATASET
-# =========================================================
-dataset = load_dataset(DATASET_NAME)
-
-train_ds = dataset["train"]
+print("📥 Memuat dataset...")
+dataset = load_dataset(DATASET_NAME, split="train")
+print(f"✅ Loaded train split: {len(dataset):,} rows")
 
 def batch_iterator(batch_size=1000):
-    for i in range(0, len(train_ds), batch_size):
-        batch = train_ds[i:i + batch_size]
-        texts = batch["text"]
-        # filter null/empty
-        texts = [t for t in texts if isinstance(t, str) and t.strip()]
-        if texts:
-            yield texts
+    for i in range(0, len(dataset), batch_size):
+        batch = dataset[i:i + batch_size]["text"]
+        batch = [x for x in batch if isinstance(x, str) and x.strip()]
+        if batch:
+            yield batch
 
-# =========================================================
-# BUILD TOKENIZER
-# =========================================================
-tokenizer = Tokenizer(models.BPE(unk_token="[UNK]"))
+print("🧠 Membangun tokenizer...")
 
-# NFKC tanpa lowercase
+tokenizer = Tokenizer(
+    models.BPE(
+        unk_token="[UNK]",
+        end_of_word_suffix=END_OF_WORD_SUFFIX
+    )
+)
+
+# Normalizer: NFKC, no lowercase
 tokenizer.normalizer = normalizers.NFKC()
 
-# Pre-tokenizer Whitespace
+# Pre-tokenizer: split by whitespace
 tokenizer.pre_tokenizer = pre_tokenizers.Whitespace()
 
-# Decoder BPE
-tokenizer.decoder = decoders.BPEDecoder()
+# Decoder: restore end-of-word suffix back into spaces
+tokenizer.decoder = decoders.BPEDecoder(suffix=END_OF_WORD_SUFFIX)
 
 trainer = BpeTrainer(
     vocab_size=VOCAB_SIZE,
     min_frequency=MIN_FREQUENCY,
-    special_tokens=ALL_ADDED_TOKENS,
+    special_tokens=SPECIAL_TOKENS,
+    end_of_word_suffix=END_OF_WORD_SUFFIX,
     show_progress=True,
 )
 
 tokenizer.train_from_iterator(batch_iterator(), trainer=trainer)
 
-# =========================================================
-# SPECIAL TOKEN IDS
-# =========================================================
+added_count = tokenizer.add_tokens(BRAND_TOKENS)
+print(f"✅ Menambahkan {added_count} brand token sebagai token biasa")
+
 special_token_ids = {tok: tokenizer.token_to_id(tok) for tok in SPECIAL_TOKENS}
 
-# Validasi dasar
-for tok in SPECIAL_TOKENS:
-    if special_token_ids[tok] is None:
-        raise ValueError(f"Special token {tok} tidak masuk vocab.")
+for tok, tok_id in special_token_ids.items():
+    if tok_id is None:
+        raise ValueError(f"Special token hilang dari vocab: {tok}")
 
-# =========================================================
-# POST PROCESSOR
-# Single: [BOS] X [EOS]
-# Pair  : [BOS] A [SEP] B [EOS]
-# =========================================================
+print("✅ Special token IDs:")
+for tok, tok_id in special_token_ids.items():
+    print(f"   {tok}: {tok_id}")
+
 tokenizer.post_processor = processors.TemplateProcessing(
     single="[BOS] $A [EOS]",
     pair="[BOS] $A [SEP] $B [EOS]",
@@ -115,13 +110,11 @@ tokenizer.post_processor = processors.TemplateProcessing(
     ],
 )
 
-# Save raw tokenizer
+# Simpan raw tokenizer
 tokenizer_json_path = OUTPUT_DIR / "tokenizer.json"
 tokenizer.save(str(tokenizer_json_path))
+print(f"✅ Saved tokenizer.json -> {tokenizer_json_path}")
 
-# =========================================================
-# WRAP AS PreTrainedTokenizerFast
-# =========================================================
 fast_tokenizer = PreTrainedTokenizerFast(
     tokenizer_file=str(tokenizer_json_path),
     unk_token="[UNK]",
@@ -136,18 +129,20 @@ fast_tokenizer = PreTrainedTokenizerFast(
     ],
 )
 
-# Save HF tokenizer files
-fast_tokenizer.save_pretrained(str(OUTPUT_DIR))
+# tambahkan brand tokens sebagai token biasa
+fast_tokenizer.add_tokens(BRAND_TOKENS)
 
-# =========================================================
-# CUSTOM tokenizer_config.json
-# =========================================================
+# simpan tokenizer HF
+fast_tokenizer.save_pretrained(str(OUTPUT_DIR))
+print(f"✅ Saved HF tokenizer files -> {OUTPUT_DIR}")
+
 tokenizer_config = {
     "version": VERSION,
-    "vocab_size": VOCAB_SIZE,
+    "vocab_size": fast_tokenizer.vocab_size + len(BRAND_TOKENS),
     "pre_tokenizer": "Whitespace",
     "normalizer": "NFKC (NO lowercase)",
     "model": "BPE",
+    "end_of_word_suffix": END_OF_WORD_SUFFIX,
     "brand_tokens": BRAND_TOKENS,
     "special_tokens": {
         tok: special_token_ids[tok] for tok in SPECIAL_TOKENS
@@ -170,9 +165,6 @@ tokenizer_config = {
 with open(OUTPUT_DIR / "tokenizer_config.json", "w", encoding="utf-8") as f:
     json.dump(tokenizer_config, f, ensure_ascii=False, indent=2)
 
-# =========================================================
-# SPECIAL TOKENS MAP
-# =========================================================
 special_tokens_map = {
     "unk_token": "[UNK]",
     "pad_token": "[PAD]",
@@ -189,7 +181,5 @@ special_tokens_map = {
 with open(OUTPUT_DIR / "special_tokens_map.json", "w", encoding="utf-8") as f:
     json.dump(special_tokens_map, f, ensure_ascii=False, indent=2)
 
-print(f"Tokenizer selesai disimpan di: {OUTPUT_DIR.resolve()}")
-print("Special token IDs:")
-for k, v in special_token_ids.items():
-    print(f"{k}: {v}")
+print("🎉 Tokenizer v3 selesai dibuat!")
+print(f"📁 Output folder: {OUTPUT_DIR.resolve()}")
